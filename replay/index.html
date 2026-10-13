@@ -129,6 +129,14 @@
   .chip.draw { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); }
   .fight .dmg { color: var(--muted); }
 
+  .table-wrap { overflow-x: auto; }
+  .selfplay table { border-collapse: collapse; font-size: 13px; min-width: 520px; width: 100%; }
+  .selfplay th, .selfplay td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: right; font-variant-numeric: tabular-nums; }
+  .selfplay th:first-child, .selfplay td:first-child { text-align: left; color: var(--muted); font-weight: 400; }
+  .selfplay thead th { font: 600 12px/1.3 var(--font-body); color: var(--ink); vertical-align: bottom; }
+  .selfplay thead th small { display: block; font-weight: 400; color: var(--muted); }
+  .selfplay td { font-family: var(--font-data); }
+
   .notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
   .notes h2 { margin: 0 0 6px; font: 600 14px/1.3 var(--font-body); }
   .notes p { margin: 0 0 8px; font-size: 13.5px; color: var(--muted); }
@@ -146,7 +154,8 @@
     <h1><span class="bot">PvpBot</span> <span class="vs">vs</span> <span class="theo">Theo</span></h1>
     <p class="lede"><strong>PvpBot</strong> is a neural network trained with PPO inside a real Minecraft server. It sees 284 numbers per step
       and picks a move, a look direction, an attack or item use every 0.1 seconds. <strong>Theo</strong> is the Carpet PvP mod's hand-coded fighting AI,
-      set to its expert difficulty. Every frame below comes from a recorded fight, and every recorded fight is listed.</p>
+      set to its expert difficulty. The bot also fights copies of itself (self-play). Every frame below comes from a recorded fight,
+      and every recorded fight is listed.</p>
     <ul class="facts">
       <li><span class="num good">30–0</span><span class="what">final bot vs a freshly spawned expert Theo, sword style (30-fight evaluation)</span></li>
       <li><span class="num bad">0–10</span><span class="what">the same Theo against the bot before reinforcement learning</span></li>
@@ -165,7 +174,7 @@
             <div class="held" id="heldA">–</div>
           </div>
           <div class="card theo">
-            <div class="who"><small>Carpet AI</small>Theo <span class="dot" style="background: var(--theo)"></span></div>
+            <div class="who"><small id="subB">Carpet AI</small><span id="nameB">Theo</span> <span class="dot" style="background: var(--theo)"></span></div>
             <div class="hearts" id="heartsB"></div>
             <div class="held" id="heldB">–</div>
           </div>
@@ -220,6 +229,15 @@
     <aside class="fights" id="fightList" aria-label="Recorded fights"></aside>
   </div>
 
+  <section class="panel selfplay" aria-labelledby="selfplayTitle">
+    <h2 id="selfplayTitle">Against itself</h2>
+    <p>Theo loses to a close-range bow rush, so against him the final bot barely touches the rest of its kit. Against a copy of itself that
+      rush stops working. The fights below last several times longer, and both sides lean on the axe, golden apples, lava and water buckets,
+      wind charges and the fishing rod. Both heal back a lot of health, which is why most mirror fights run out the clock.
+      These numbers describe the recorded fights only; a handful of fights is too few to call it a measured strategy.</p>
+    <div class="table-wrap"><table id="styleTable"></table></div>
+  </section>
+
   <section class="notes">
     <div>
       <h2>How it learned</h2>
@@ -231,7 +249,8 @@
       <h2>What it actually does</h2>
       <p>Against sword-style Theo the bot wins mostly with the bow at close range, holding it about 90% of the time. That beats this opponent
         reliably; it is not all-round PvP skill. Its shield is almost never up.</p>
-      <p>Against bow-style Theo the recorded wins come from setting him on fire with lava. Fire damage earns no reward, but a knockout still does.</p>
+      <p>Against bow-style Theo it is much weaker. Across six recorded fights it won three, all by setting him on fire with lava, lost one
+        and drew two. Fire damage earns no reward, but a knockout still does.</p>
     </div>
     <div>
       <h2>How these were recorded</h2>
@@ -692,9 +711,14 @@
   function seek(f) { frame = Math.max(0, Math.min(last, f)); needsDraw = true; if (frame >= last) setPlaying(false); }
   function requestDraw() { needsDraw = true; }
 
+  // the opponent is Theo or a copy of the bot; name it in the HUD, its tag and the result banner
+  const rivalName = f => (f.selfPlay ? (f.opponentName || "Copy").split(" (")[0] : f.opponentName || "Theo");
   function loadFight(index, autoplay) {
     current = index;
     prepare(index);
+    document.getElementById("nameB").textContent = rivalName(fight);
+    document.getElementById("subB").textContent = fight.selfPlay ? "self-play" : "Carpet AI";
+    tags[1].textContent = rivalName(fight);
     scrub.max = String(last);
     frame = 0;
     lastChartFrame = -1;
@@ -729,7 +753,7 @@
       const done = frame >= last;
       banner.hidden = !done;
       if (done) {
-        banner.textContent = fight.outcome === 1 ? "PvpBot wins" : fight.outcome === -1 ? "Theo wins" : "Draw: time ran out";
+        banner.textContent = fight.outcome === 1 ? "PvpBot wins" : fight.outcome === -1 ? rivalName(fight) + " wins" : "Draw: time ran out";
         banner.style.color = fight.outcome === 1 ? T.bot : fight.outcome === -1 ? T.theo : T.muted;
       }
       if (playing) needsDraw = true;
@@ -786,6 +810,59 @@
   foot.textContent = "Numbers on the right: damage dealt / taken by PvpBot.";
   list.appendChild(foot);
   document.getElementById("recorded").textContent = `Recorded ${R.recorded}: ${R.fights.length} fights, all shown.`;
+
+  // ---------- style comparison: final bot vs Theo, and vs a copy of itself ----------
+  function styleStats(fights, sides) {
+    const s = { n: fights.length, sides: sides.length, ko: 0, draws: 0, steps: 0, held: {}, shield: 0, heal: 0, dist: 0, frames: 0, lava: 0, water: 0, len: 0 };
+    for (const f of fights) {
+      if (f.outcome === 0) s.draws++; else s.ko++;
+      s.len += f.frames.length - 1;
+      f.frames.forEach((x, k) => {
+        s.frames++;
+        if (x.l.some(l => l[3])) s.lava++;
+        if (x.l.some(l => !l[3])) s.water++;
+        for (const side of sides) {
+          const me = x[side], other = x[side === "a" ? "b" : "a"];
+          const item = R.items[me[I.held]];
+          s.held[item] = (s.held[item] || 0) + 1;
+          s.steps++;
+          if (me[I.flags] & FLAG.blocking) s.shield++;
+          s.dist += Math.hypot(me[I.x] - other[I.x], me[I.z] - other[I.z]);
+          if (k) {
+            const before = f.frames[k - 1][side], gain = me[I.health] + me[I.abs] - before[I.health] - before[I.abs];
+            if (gain > 0.5) s.heal += gain;
+          }
+        }
+      });
+    }
+    return s;
+  }
+  const vsTheo = R.fights.filter(f => !f.selfPlay && f.label === "Final bot" && /\(smp\)/.test(f.opponent));
+  const mirror = R.fights.filter(f => f.selfPlay && /^Mirror/.test(f.opponentName || ""));
+  if (vsTheo.length && mirror.length) {
+    const a = styleStats(vsTheo, ["a"]), b = styleStats(mirror, ["a", "b"]);
+    const pct = (s, item) => Math.round(((s.held[item] || 0) / s.steps) * 100) + "%";
+    const rows = [
+      ["Fights recorded", s => s.n],
+      ["Ended by knockout", s => s.ko],
+      ["Ran out the clock (draw)", s => s.draws],
+      ["Average fight length", s => ((s.len / s.n) * R.stepSeconds).toFixed(1) + " s"],
+      ["Bow in hand", s => pct(s, "bow")],
+      ["Axe in hand", s => pct(s, "iron_axe")],
+      ["Sword in hand", s => pct(s, "iron_sword")],
+      ["Shield up", s => Math.round((s.shield / s.steps) * 100) + "%"],
+      ["Health healed per fighter per fight", s => (s.heal / (s.n * s.sides)).toFixed(1)],
+      ["Average distance between fighters", s => (s.dist / s.steps).toFixed(1) + " blocks"],
+      ["Time with lava on the floor", s => Math.round((s.lava / s.frames) * 100) + "%"],
+      ["Time with water on the floor", s => Math.round((s.water / s.frames) * 100) + "%"],
+    ];
+    document.getElementById("styleTable").innerHTML =
+      `<thead><tr><th></th><th>Final bot vs Theo expert<small>sword style · bot's side</small></th>` +
+      `<th>Final bot vs itself<small>mirror match · both sides</small></th></tr></thead><tbody>` +
+      rows.map(([label, fn]) => `<tr><td>${label}</td><td>${fn(a)}</td><td>${fn(b)}</td></tr>`).join("") + "</tbody>";
+  } else {
+    document.querySelector(".selfplay").hidden = true;
+  }
 
   // ---------- sizing and theme ----------
   function resize() {

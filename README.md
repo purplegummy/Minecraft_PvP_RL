@@ -21,8 +21,32 @@ really fighting. Logs are in [`logs/`](logs).
 Limits:
 - The bot wins mostly with the bow at close range. It beats this opponent reliably; it is not all-round PvP skill.
 - Theo fights with the bot's kit (no totems or potions), so this is not Carpet's full expert setup.
-- Against Theo's bow style it is much weaker: in 3 recorded fights it won twice by setting him on fire with lava,
-  and drew once.
+- Against Theo's bow style it is much weaker: across 6 recorded fights it won 3, all by setting him on fire with
+  lava, lost 1 and drew 2.
+
+## Self-play
+
+The goal was to see whether the bot would come up with its own PvP style. Against Theo it didn't need to: a
+close-range bow rush beats him, so the final bot holds the bow 87% of the time and ignores most of its kit.
+
+Against a copy of itself the rush stops working, and the fights look different. From 8 recorded mirror matches
+(both sides counted) compared with 8 fights against Theo expert:
+
+| | vs Theo expert | vs itself |
+|---|---|---|
+| Ended in a draw (time ran out) | 0 of 8 | 5 of 8 |
+| Average fight length | 11.7 s | 47.8 s |
+| Bow in hand | 87% | 49% |
+| Axe in hand | 9% | 19% |
+| Health healed per fighter per fight | 1.3 | 14.9 |
+| Average distance | 6.0 blocks | 9.0 blocks |
+| Time with lava on the floor | 1% | 45% |
+| Time with water on the floor | 2% | 78% |
+
+So in self-play it uses much more of the kit (axe, golden apples, lava and water buckets, wind charges, the
+fishing rod) and fights longer, more drawn-out battles where both sides heal back. These are 8 fights; they show
+what happened in them, not a measured strategy. The final bot also beat its own update-302 version 4–0. You can
+watch all of them in the replay viewer.
 
 ## How it works
 

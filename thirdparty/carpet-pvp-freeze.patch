@@ -1,0 +1,26 @@
+﻿diff --git a/src/main/java/carpet/paper/CarpetPvpPlugin.java b/src/main/java/carpet/paper/CarpetPvpPlugin.java
+index ae2ca05..ed85e2b 100644
+--- a/src/main/java/carpet/paper/CarpetPvpPlugin.java
++++ b/src/main/java/carpet/paper/CarpetPvpPlugin.java
+@@ -70,6 +70,8 @@ public class CarpetPvpPlugin extends JavaPlugin
+         // scenario drops to a hit point for one tick and is put back by DelayedTasks, so a session
+         // has to be ticked on that tick too or it never sees the fighter die.
+         tickTask = getServer().getScheduler().runTaskTimer(this, () -> {
++            // rlmob: the scheduler keeps running under /tick freeze; only think on ticks the world simulates
++            if (!server.tickRateManager().runsNormally()) return;
+             BotBudget.instance().beginTick(BotSettings.botSimBudget);
+             DelayedTasks.tick(server);
+             SelfTest.tick(server);
+diff --git a/src/main/java/carpet/patches/EntityPlayerMPFake.java b/src/main/java/carpet/patches/EntityPlayerMPFake.java
+index 003e7b3..0bf9120 100644
+--- a/src/main/java/carpet/patches/EntityPlayerMPFake.java
++++ b/src/main/java/carpet/patches/EntityPlayerMPFake.java
+@@ -665,6 +665,8 @@ public class EntityPlayerMPFake extends ServerPlayer
+ 
+     @Override
+     public void tick() {
++        // rlmob: players are exempt from /tick freeze; skip ticks the rest of the world isn't simulating
++        if (!this.level().tickRateManager().runsNormally()) return;
+         if (pendingKnockback != null)
+         {
+             setDeltaMovement(pendingKnockback);

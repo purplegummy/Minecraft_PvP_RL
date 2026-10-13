@@ -1,0 +1,802 @@
+<title>PvpBot vs Theo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Pixelify+Sans:wght@500;700&display=swap">
+<style>
+  /* Layout: a replay desk. The arena viewport and the fight list sit side by side, with transport, timeline and
+     the bot's own forecast stacked under the arena; notes on method follow. */
+  :root {
+    --ground: #eceef1;
+    --panel: #f8f9fb;
+    --ink: #1c2127;
+    --muted: #5b6570;
+    --line: #d3d8de;
+    --bot: #1f6bc9;
+    --theo: #c03a2e;
+    --gold: #b98a0c;
+    --sky: #dde3ea;
+    --floor-a: #bfc4ca;
+    --floor-b: #a9afb6;
+    --glass: #9fc4d8;
+    --font-display: "Pixelify Sans", "Courier New", monospace;
+    --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --font-data: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #14171b; --panel: #1b1f25; --ink: #e6e9ed; --muted: #98a2ad; --line: #2b3139;
+      --bot: #5ea3ff; --theo: #ff6f61; --gold: #e3b636;
+      --sky: #0f1216; --floor-a: #41464d; --floor-b: #353a40; --glass: #5f8aa3;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #14171b; --panel: #1b1f25; --ink: #e6e9ed; --muted: #98a2ad; --line: #2b3139;
+    --bot: #5ea3ff; --theo: #ff6f61; --gold: #e3b636;
+    --sky: #0f1216; --floor-a: #41464d; --floor-b: #353a40; --glass: #5f8aa3;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body { background: var(--ground); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+  .page { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 56px; display: grid; gap: 22px; }
+
+  header { display: grid; gap: 14px; }
+  .kicker { font: 500 12px/1 var(--font-data); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  h1 { font: 700 clamp(30px, 5vw, 46px)/1.05 var(--font-display); margin: 0; text-wrap: balance; letter-spacing: .01em; }
+  h1 .vs { color: var(--muted); font-weight: 500; }
+  h1 .bot { color: var(--bot); }
+  h1 .theo { color: var(--theo); }
+  .lede { margin: 0; max-width: 68ch; color: var(--muted); }
+  .lede strong { color: var(--ink); font-weight: 600; }
+  .facts { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 0; padding: 0; list-style: none; }
+  .facts li { display: grid; gap: 2px; min-width: 0; }
+  .facts .num { font: 700 26px/1.1 var(--font-display); font-variant-numeric: tabular-nums; }
+  .facts .num.good { color: var(--bot); }
+  .facts .num.bad { color: var(--theo); }
+  .facts .what { font-size: 13px; color: var(--muted); max-width: 30ch; }
+
+  .desk { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; align-items: start; }
+  @media (max-width: 920px) { .desk { grid-template-columns: minmax(0, 1fr); } }
+
+  .stage { display: grid; gap: 12px; min-width: 0; }
+  .viewport { position: relative; aspect-ratio: 16 / 10; max-height: 72vh; width: 100%; border-radius: 6px; overflow: hidden;
+    background: var(--sky); border: 1px solid var(--line); touch-action: none; cursor: grab; }
+  .viewport:active { cursor: grabbing; }
+  .viewport canvas { display: block; width: 100%; height: 100%; }
+  .hud { position: absolute; inset: 10px 10px auto 10px; display: flex; justify-content: space-between; gap: 10px; pointer-events: none; }
+  .card { background: color-mix(in srgb, var(--panel) 86%, transparent); border: 1px solid var(--line); border-radius: 5px;
+    padding: 6px 9px 7px; display: grid; gap: 3px; min-width: 0; backdrop-filter: blur(3px); }
+  .card .who { display: flex; align-items: baseline; gap: 8px; font: 600 13px/1.2 var(--font-body); }
+  .card .who .dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+  .card .who small { font: 400 11px/1 var(--font-data); color: var(--muted); }
+  .card.theo { text-align: right; }
+  .card.theo .who { justify-content: flex-end; }
+  .card .held { font: 400 11px/1.2 var(--font-data); color: var(--muted); }
+  .hearts { display: flex; gap: 1px; }
+  .card.theo .hearts { justify-content: flex-end; }
+  .heart { position: relative; width: 13px; height: 12px; }
+  .heart svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .heart .empty { fill: var(--line); }
+  .heart .full { fill: var(--theo); }
+  .heart.gold .full { fill: var(--gold); }
+  .heart.half .full { clip-path: inset(0 50% 0 0); }
+  .heart.none .full { display: none; }
+  .tag { position: absolute; transform: translate(-50%, -100%); pointer-events: none; font: 500 11px/1 var(--font-data);
+    padding: 2px 5px; border-radius: 3px; background: color-mix(in srgb, var(--panel) 80%, transparent); white-space: nowrap; }
+  .result-banner { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); font: 700 18px/1 var(--font-display);
+    padding: 8px 14px; border-radius: 5px; background: var(--panel); border: 1px solid var(--line); pointer-events: none; }
+  .hint { position: absolute; right: 10px; bottom: 8px; font: 400 11px/1 var(--font-data); color: var(--muted); pointer-events: none; }
+
+  .transport { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  button, select { font: 500 13px/1 var(--font-body); color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+    border-radius: 5px; padding: 8px 11px; cursor: pointer; }
+  button:hover, select:hover { border-color: var(--muted); }
+  button:focus-visible, select:focus-visible, input:focus-visible, .fight:focus-visible { outline: 2px solid var(--bot); outline-offset: 2px; }
+  button.primary { background: var(--ink); color: var(--panel); border-color: var(--ink); min-width: 74px; }
+  .clock { font: 500 13px/1 var(--font-data); font-variant-numeric: tabular-nums; color: var(--muted); margin-left: auto; }
+  .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
+
+  .timeline { position: relative; height: 46px; }
+  .timeline canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .timeline input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; display: grid; gap: 8px; min-width: 0; }
+  .panel h2 { margin: 0; font: 600 14px/1.3 var(--font-body); }
+  .panel p { margin: 0; font-size: 13px; color: var(--muted); max-width: 70ch; }
+  .chart { position: relative; height: 130px; }
+  .chart canvas, .strip canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .strip { position: relative; height: 44px; }
+
+  aside.fights { display: grid; gap: 14px; min-width: 0; }
+  .group { display: grid; gap: 6px; }
+  .group h3 { margin: 0; font: 600 13px/1.3 var(--font-body); }
+  .group h3 small { display: block; font: 400 12px/1.4 var(--font-body); color: var(--muted); }
+  .fight { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; text-align: left; width: 100%;
+    padding: 7px 9px; font: 400 12px/1.2 var(--font-data); font-variant-numeric: tabular-nums; }
+  .fight[aria-current="true"] { border-color: var(--ink); box-shadow: inset 3px 0 0 var(--ink); }
+  .chip { font: 600 11px/1 var(--font-body); padding: 4px 6px; border-radius: 3px; letter-spacing: .02em; }
+  .chip.won { background: color-mix(in srgb, var(--bot) 18%, transparent); color: var(--bot); }
+  .chip.lost { background: color-mix(in srgb, var(--theo) 18%, transparent); color: var(--theo); }
+  .chip.draw { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); }
+  .fight .dmg { color: var(--muted); }
+
+  .notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
+  .notes h2 { margin: 0 0 6px; font: 600 14px/1.3 var(--font-body); }
+  .notes p { margin: 0 0 8px; font-size: 13.5px; color: var(--muted); }
+  .notes code { font: 400 12.5px var(--font-data); color: var(--ink); }
+
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+
+<div class="page">
+  <header>
+    <div class="kicker">Reinforcement learning · Minecraft PvP · recorded fights</div>
+    <h1><span class="bot">PvpBot</span> <span class="vs">vs</span> <span class="theo">Theo</span></h1>
+    <p class="lede"><strong>PvpBot</strong> is a neural network trained with PPO inside a real Minecraft server. It sees 284 numbers per step
+      and picks a move, a look direction, an attack or item use every 0.1 seconds. <strong>Theo</strong> is the Carpet PvP mod's hand-coded fighting AI,
+      set to its expert difficulty. Every frame below comes from a recorded fight, and every recorded fight is listed.</p>
+    <ul class="facts">
+      <li><span class="num good">30–0</span><span class="what">final bot vs a freshly spawned expert Theo, sword style (30-fight evaluation)</span></li>
+      <li><span class="num bad">0–10</span><span class="what">the same Theo against the bot before reinforcement learning</span></li>
+      <li><span class="num">10</span><span class="what">arenas trained in parallel, 1,140 PPO updates</span></li>
+    </ul>
+  </header>
+
+  <div class="desk">
+    <section class="stage" aria-label="Replay">
+      <div class="viewport" id="viewport">
+        <canvas id="scene" aria-label="3D replay of the selected fight"></canvas>
+        <div class="hud">
+          <div class="card bot">
+            <div class="who"><span class="dot" style="background: var(--bot)"></span>PvpBot <small>PPO agent</small></div>
+            <div class="hearts" id="heartsA"></div>
+            <div class="held" id="heldA">–</div>
+          </div>
+          <div class="card theo">
+            <div class="who"><small>Carpet AI</small>Theo <span class="dot" style="background: var(--theo)"></span></div>
+            <div class="hearts" id="heartsB"></div>
+            <div class="held" id="heldB">–</div>
+          </div>
+        </div>
+        <div class="tag" id="tagA" style="color: var(--bot)">PvpBot</div>
+        <div class="tag" id="tagB" style="color: var(--theo)">Theo</div>
+        <div class="result-banner" id="banner" hidden></div>
+        <div class="hint">Drag to orbit · scroll to zoom</div>
+      </div>
+
+      <div class="transport">
+        <button id="restart" type="button" title="Back to the start">⏮</button>
+        <button id="back" type="button" title="One step back (←)">◀</button>
+        <button id="play" type="button" class="primary">Play</button>
+        <button id="fwd" type="button" title="One step forward (→)">▶</button>
+        <select id="speed" aria-label="Playback speed">
+          <option value="0.25">0.25×</option>
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+        </select>
+        <label class="toggle"><input type="checkbox" id="follow" checked> Follow fight</label>
+        <label class="toggle"><input type="checkbox" id="aim" checked> Aim lines</label>
+        <span class="clock" id="clock">0.0 s · tick 0</span>
+      </div>
+
+      <div class="timeline">
+        <canvas id="timeline"></canvas>
+        <input type="range" id="scrub" min="0" max="1" step="0.01" value="0" aria-label="Fight timeline">
+      </div>
+      <div class="legend">
+        <span><i style="background: var(--bot)"></i>PvpBot lands damage (above the line)</span>
+        <span><i style="background: var(--theo)"></i>PvpBot takes damage (below)</span>
+        <span>Taller mark = more damage. Fire and lava damage are not marked.</span>
+      </div>
+
+      <div class="panel">
+        <h2>What the bot expects</h2>
+        <p>The value network's estimate, at each moment, of the reward still to come for PvpBot. Above zero it expects to come out ahead;
+          a win is worth +1 on top of the damage difference.</p>
+        <div class="chart"><canvas id="valueChart"></canvas></div>
+      </div>
+
+      <div class="panel">
+        <h2>What each fighter held</h2>
+        <div class="strip"><canvas id="itemStrip"></canvas></div>
+        <div class="legend" id="itemLegend"></div>
+      </div>
+    </section>
+
+    <aside class="fights" id="fightList" aria-label="Recorded fights"></aside>
+  </div>
+
+  <section class="notes">
+    <div>
+      <h2>How it learned</h2>
+      <p>The policy copied a simple hand-written fighter first (imitation learning), because PPO from a random start never learned to land a hit.
+        It then trained with PPO through 11 opponents of rising difficulty, while 9 more arenas ran self-play against itself and frozen copies of
+        earlier versions.</p>
+    </div>
+    <div>
+      <h2>What it actually does</h2>
+      <p>Against sword-style Theo the bot wins mostly with the bow at close range, holding it about 90% of the time. That beats this opponent
+        reliably; it is not all-round PvP skill. Its shield is almost never up.</p>
+      <p>Against bow-style Theo the recorded wins come from setting him on fire with lava. Fire damage earns no reward, but a knockout still does.</p>
+    </div>
+    <div>
+      <h2>How these were recorded</h2>
+      <p>Theo is spawned fresh for each batch and fights with the same kit as the bot. The bot samples its actions from its policy, as in training.
+        Positions, look direction, items, health and projectiles were saved every 0.1 s (two game ticks) by <code>record_fights.py</code>.</p>
+      <p id="recorded"></p>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="fights.js"></script>
+<script>
+(function () {
+  "use strict";
+  const R = window.REPLAY;
+  const vp = document.getElementById("viewport");
+  if (!R || !window.THREE) {
+    vp.innerHTML = '<p style="padding:24px">The replay data or the 3D library did not load. Check that fights.js sits next to this page.</p>';
+    return;
+  }
+  const I = { x: 0, y: 1, z: 2, yaw: 3, pitch: 4, health: 5, abs: 6, max: 7, held: 8, flags: 9 };
+  const FLAG = { blocking: 1, using: 2, burning: 4 };
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const ITEM = {
+    iron_sword: { name: "Iron sword", color: "#cfd4da", shape: "blade" },
+    stone_sword: { name: "Stone sword", color: "#8d9196", shape: "blade" },
+    wooden_sword: { name: "Wooden sword", color: "#9c7444", shape: "blade" },
+    iron_axe: { name: "Iron axe", color: "#b4bac1", shape: "axe" },
+    bow: { name: "Bow", color: "#7b5432", shape: "bow" },
+    fishing_rod: { name: "Fishing rod", color: "#6a4a2c", shape: "rod" },
+    wind_charge: { name: "Wind charge", color: "#d6e4f0", shape: "orb" },
+    lava_bucket: { name: "Lava bucket", color: "#f07a1f", shape: "bucket" },
+    water_bucket: { name: "Water bucket", color: "#3b78d4", shape: "bucket" },
+    bucket: { name: "Empty bucket", color: "#9aa1a8", shape: "bucket" },
+    ender_pearl: { name: "Ender pearl", color: "#1e7062", shape: "orb" },
+    golden_apple: { name: "Golden apple", color: "#e0b12e", shape: "orb" },
+    air: { name: "Empty hand", color: "#00000000", shape: "none" },
+  };
+  const itemInfo = name => ITEM[name] || { name: name.replace(/_/g, " "), color: "#888888", shape: "orb" };
+
+  // ---------- theme ----------
+  const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  let T = {};
+  function readTheme() {
+    for (const k of ["ground", "panel", "ink", "muted", "line", "bot", "theo", "gold", "sky", "floor-a", "floor-b", "glass"]) T[k] = css("--" + k);
+  }
+  readTheme();
+
+  // ---------- scene ----------
+  const canvas = document.getElementById("scene");
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(40, 16 / 10, 0.1, 200);
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f96, 0.75));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.75);
+  sun.position.set(9, 22, 7);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  Object.assign(sun.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16, near: 1, far: 60 });
+  scene.add(sun);
+
+  // floor: 25 x 25 smooth stone blocks, with the andesite rim under the walls
+  const floorCanvas = document.createElement("canvas");
+  floorCanvas.width = floorCanvas.height = 27 * 16;
+  const floorTex = new THREE.CanvasTexture(floorCanvas);
+  floorTex.magFilter = THREE.NearestFilter;
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(27, 27), new THREE.MeshStandardMaterial({ map: floorTex, roughness: 1 }));
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  scene.add(floor);
+  function paintFloor() {
+    const g = floorCanvas.getContext("2d");
+    for (let i = 0; i < 27; i++) for (let j = 0; j < 27; j++) {
+      const rim = i === 0 || j === 0 || i === 26 || j === 26;
+      g.fillStyle = rim ? T["floor-b"] : T["floor-a"];
+      g.fillRect(i * 16, j * 16, 16, 16);
+      g.fillStyle = T["floor-b"];
+      g.fillRect(i * 16, j * 16, 16, 1);
+      g.fillRect(i * 16, j * 16, 1, 16);
+    }
+    floorTex.needsUpdate = true;
+  }
+
+  // glass walls, 4 blocks high, one block thick, around the 25 x 25 floor
+  const glassMat = new THREE.MeshStandardMaterial({ transparent: true, opacity: 0.16, roughness: 0.1, depthWrite: false });
+  const edgeMat = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.45 });
+  for (const [w, d, x, z] of [[27, 1, 0, 13], [27, 1, 0, -13], [1, 25, 13, 0], [1, 25, -13, 0]]) {
+    const geo = new THREE.BoxGeometry(w, 4, d);
+    const wall = new THREE.Mesh(geo, glassMat);
+    wall.position.set(x, 2, z);
+    scene.add(wall);
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat);
+    edges.position.copy(wall.position);
+    scene.add(edges);
+  }
+
+  function applyTheme() {
+    readTheme();
+    scene.background = new THREE.Color(T.sky);
+    glassMat.color.setStyle(T.glass);
+    edgeMat.color.setStyle(T.glass);
+    paintFloor();
+    for (const f of fighters) f.recolor();
+    drawStatic();
+  }
+
+  // ---------- fighters ----------
+  function box(w, h, d, mat) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.castShadow = true;
+    return m;
+  }
+  function makeFighter(token) {
+    const shirt = new THREE.MeshStandardMaterial({ roughness: 0.8 });
+    const pants = new THREE.MeshStandardMaterial({ roughness: 0.9 });
+    const skin = new THREE.MeshStandardMaterial({ color: 0xd9b48f, roughness: 0.9 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x20242a, roughness: 1 });
+    const root = new THREE.Group();
+    const body = new THREE.Group();
+    root.add(body);
+    const legL = new THREE.Group(), legR = new THREE.Group();
+    legL.position.set(-0.125, 0.75, 0); legR.position.set(0.125, 0.75, 0);
+    for (const leg of [legL, legR]) { const m = box(0.25, 0.75, 0.25, pants); m.position.y = -0.375; leg.add(m); body.add(leg); }
+    const torso = box(0.5, 0.75, 0.25, shirt); torso.position.y = 1.125; body.add(torso);
+    const armL = new THREE.Group(), armR = new THREE.Group();
+    armL.position.set(-0.375, 1.5, 0); armR.position.set(0.375, 1.5, 0);
+    for (const arm of [armL, armR]) { const m = box(0.25, 0.75, 0.25, shirt); m.position.y = -0.375; arm.add(m); body.add(arm); }
+    const head = new THREE.Group(); head.position.y = 1.5; body.add(head);
+    const skull = box(0.5, 0.5, 0.5, skin); skull.position.y = 0.25; head.add(skull);
+    const eyes = box(0.36, 0.07, 0.02, dark); eyes.position.set(0, 0.27, 0.255); head.add(eyes);
+    // shield on the left arm, item in the right hand
+    const shield = box(0.08, 0.62, 0.48, new THREE.MeshStandardMaterial({ color: 0x8a6a45, roughness: 0.9 }));
+    shield.position.set(-0.18, -0.55, 0.08); armL.add(shield);
+    const hand = new THREE.Group(); hand.position.set(0, -0.72, 0.05); armR.add(hand);
+    const itemMat = new THREE.MeshStandardMaterial({ roughness: 0.6 });
+    const shapes = {
+      blade: (() => { const m = box(0.07, 0.07, 0.85, itemMat); m.position.z = 0.35; return m; })(),
+      axe: (() => { const g = new THREE.Group(); const h = box(0.06, 0.06, 0.7, itemMat); h.position.z = 0.25; const b = box(0.05, 0.3, 0.2, itemMat); b.position.set(0, 0.12, 0.55); g.add(h, b); return g; })(),
+      bow: (() => { const m = box(0.06, 0.8, 0.1, itemMat); m.position.z = 0.08; return m; })(),
+      rod: (() => { const m = box(0.04, 0.04, 1.1, itemMat); m.position.z = 0.5; m.rotation.x = -0.4; return m; })(),
+      bucket: (() => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.1, 0.24, 10), itemMat); m.castShadow = true; m.position.z = 0.1; return m; })(),
+      orb: (() => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 10), itemMat); m.castShadow = true; m.position.z = 0.1; return m; })(),
+    };
+    for (const s of Object.values(shapes)) { s.visible = false; hand.add(s); }
+    // aim line from the eyes, along the look direction
+    const aimGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, 1)]);
+    const aimMat = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.85 });
+    const aim = new THREE.Line(aimGeo, aimMat);
+    scene.add(aim);
+    scene.add(root);
+    return {
+      root, body, head, armL, armR, legL, legR, shield, shapes, itemMat, shirt, pants, aim, aimMat, token,
+      recolor() {
+        const c = new THREE.Color(T[token]);
+        shirt.color.copy(c);
+        pants.color.copy(c).multiplyScalar(0.55);
+        aimMat.color.copy(c);
+      },
+    };
+  }
+  const fighters = [makeFighter("bot"), makeFighter("theo")];
+
+  // projectiles and placed liquids, drawn from small pools
+  const projMats = {
+    arrow: new THREE.MeshStandardMaterial({ color: 0x6b5a45 }),
+    wind_charge: new THREE.MeshStandardMaterial({ color: 0xdce9f5, emissive: 0x334455 }),
+    fishing_bobber: new THREE.MeshStandardMaterial({ color: 0xd8443a }),
+    ender_pearl: new THREE.MeshStandardMaterial({ color: 0x1e7062 }),
+    other: new THREE.MeshStandardMaterial({ color: 0xeeeeee }),
+  };
+  const arrowGeo = new THREE.BoxGeometry(0.06, 0.06, 0.6);
+  const orbGeo = new THREE.SphereGeometry(0.14, 10, 8);
+  const projPool = [];
+  function projMesh(i) {
+    while (projPool.length <= i) {
+      const m = new THREE.Mesh(arrowGeo, projMats.arrow);
+      m.castShadow = true;
+      scene.add(m);
+      projPool.push(m);
+    }
+    return projPool[i];
+  }
+  const lavaMat = new THREE.MeshStandardMaterial({ color: 0xff6a12, emissive: 0xc23d00, emissiveIntensity: 0.8 });
+  const waterMat = new THREE.MeshStandardMaterial({ color: 0x3576d1, transparent: true, opacity: 0.6 });
+  const liquidGeo = new THREE.BoxGeometry(1, 0.88, 1);
+  const liquidPool = [];
+  function liquidMesh(i) {
+    while (liquidPool.length <= i) { const m = new THREE.Mesh(liquidGeo, lavaMat); scene.add(m); liquidPool.push(m); }
+    return liquidPool[i];
+  }
+
+  // ---------- hearts ----------
+  const HEART = [".XX.XX.", "XXXXXXX", "XXXXXXX", ".XXXXX.", "..XXX..", "...X..."];
+  let heartPath = "";
+  HEART.forEach((row, r) => [...row].forEach((ch, c) => { if (ch === "X") heartPath += `M${c} ${r}h1v1h-1z`; }));
+  function buildHearts(el) {
+    el.innerHTML = "";
+    const list = [];
+    for (let i = 0; i < 10; i++) {
+      const h = document.createElement("span");
+      h.className = "heart";
+      h.innerHTML = `<svg viewBox="0 0 7 6" class="empty" aria-hidden="true"><path d="${heartPath}"/></svg>` +
+        `<svg viewBox="0 0 7 6" class="full" aria-hidden="true"><path d="${heartPath}"/></svg>`;
+      el.appendChild(h);
+      list.push(h);
+    }
+    return list;
+  }
+  const heartEls = [buildHearts(document.getElementById("heartsA")), buildHearts(document.getElementById("heartsB"))];
+  function setHearts(list, health, max) {
+    const halves = Math.round((health / max) * 20);
+    list.forEach((h, i) => {
+      const n = halves - i * 2;
+      h.className = "heart" + (n >= 2 ? "" : n === 1 ? " half" : " none");
+    });
+  }
+
+  // ---------- data per fight ----------
+  let fight, frames, last, hurt, swing, dist;
+  function prepare(index) {
+    fight = R.fights[index];
+    frames = fight.frames;
+    last = frames.length - 1;
+    // when each fighter lost health (for the red flash) and landed damage (for the arm swing)
+    hurt = [[], []];
+    swing = [[], []];
+    dist = [[0], [0]];
+    for (let k = 1; k <= last; k++) {
+      ["a", "b"].forEach((s, n) => {
+        const prev = frames[k - 1][s], cur = frames[k][s];
+        if (cur[I.health] < prev[I.health] - 0.01) hurt[n].push(k);
+        dist[n].push(dist[n][k - 1] + Math.hypot(cur[I.x] - prev[I.x], cur[I.z] - prev[I.z]));
+      });
+      if ((frames[k - 1].hitB || 0) > 0) swing[0].push(k);
+      if ((frames[k - 1].hitA || 0) > 0) swing[1].push(k);
+    }
+  }
+  const lastBefore = (arr, f) => { let r = -99; for (const k of arr) { if (k <= f) r = k; else break; } return r; };
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const lerpAngle = (a, b, t) => a + ((((b - a) % 360) + 540) % 360 - 180) * t;
+  const rad = d => (d * Math.PI) / 180;
+
+  // ---------- camera ----------
+  const cam = { theta: rad(35), phi: rad(52), r: 27, target: new THREE.Vector3(), follow: true };
+  function placeCamera() {
+    const { theta, phi, r, target } = cam;
+    camera.position.set(target.x + r * Math.sin(phi) * Math.sin(theta), target.y + r * Math.cos(phi), target.z + r * Math.sin(phi) * Math.cos(theta));
+    camera.lookAt(target);
+  }
+  const pointers = new Map();
+  let pinch = 0;
+  vp.addEventListener("pointerdown", e => { vp.setPointerCapture(e.pointerId); pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); });
+  vp.addEventListener("pointermove", e => {
+    if (!pointers.has(e.pointerId)) return;
+    const p = pointers.get(e.pointerId);
+    if (pointers.size === 1) {
+      cam.theta -= (e.clientX - p.x) * 0.008;
+      cam.phi = Math.min(rad(84), Math.max(rad(12), cam.phi - (e.clientY - p.y) * 0.008));
+    }
+    p.x = e.clientX; p.y = e.clientY;
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinch) cam.r = Math.min(60, Math.max(8, cam.r * pinch / d));
+      pinch = d;
+    }
+    requestDraw();
+  });
+  const release = e => { pointers.delete(e.pointerId); pinch = 0; };
+  vp.addEventListener("pointerup", release);
+  vp.addEventListener("pointercancel", release);
+  vp.addEventListener("wheel", e => { e.preventDefault(); cam.r = Math.min(60, Math.max(8, cam.r * Math.exp(e.deltaY * 0.001))); requestDraw(); }, { passive: false });
+
+  // ---------- pose at a fractional frame ----------
+  const tags = [document.getElementById("tagA"), document.getElementById("tagB")];
+  const heldEls = [document.getElementById("heldA"), document.getElementById("heldB")];
+  const tmp = new THREE.Vector3();
+  function pose(f) {
+    const i = Math.floor(f), j = Math.min(i + 1, last), t = f - i;
+    const A = frames[i], B = frames[j];
+    let mid = new THREE.Vector3();
+    ["a", "b"].forEach((s, n) => {
+      const p = A[s], q = B[s], F = fighters[n];
+      const x = lerp(p[I.x], q[I.x], t), y = lerp(p[I.y], q[I.y], t), z = lerp(p[I.z], q[I.z], t);
+      const yaw = lerpAngle(p[I.yaw], q[I.yaw], t), pitch = lerp(p[I.pitch], q[I.pitch], t);
+      const flags = (t < 0.5 ? p : q)[I.flags];
+      const item = R.items[(t < 0.5 ? p : q)[I.held]];
+      F.root.position.set(x, y, z);
+      F.body.rotation.y = -rad(yaw);
+      F.head.rotation.x = rad(pitch);
+      mid.add(F.root.position);
+      // legs swing with distance walked
+      const walked = lerp(dist[n][i], dist[n][j], t);
+      const moving = Math.min(1, Math.abs(dist[n][j] - dist[n][i]) * 4);
+      F.legL.rotation.x = Math.sin(walked * 2.6) * 0.7 * moving;
+      F.legR.rotation.x = -F.legL.rotation.x;
+      // arms: drawing a bow or eating raises them, blocking raises the shield, a landed hit swings the right arm
+      const using = flags & FLAG.using, blocking = flags & FLAG.blocking;
+      const reach = -Math.PI / 2 + rad(pitch);
+      const sw = f - lastBefore(swing[n], f);
+      F.armR.rotation.x = using ? reach : sw >= 0 && sw < 2.5 ? -Math.sin((sw / 2.5) * Math.PI) * 1.7 : F.legL.rotation.x * 0.6;
+      F.armL.rotation.x = blocking ? -1.15 : using && item === "bow" ? reach : -F.armR.rotation.x * (using ? 0 : 1);
+      F.armL.rotation.z = blocking ? 0.35 : 0;
+      // held item
+      const info = itemInfo(item);
+      for (const [shape, mesh] of Object.entries(F.shapes)) mesh.visible = shape === info.shape;
+      if (info.shape !== "none") F.itemMat.color.setStyle(info.color);
+      heldEls[n].textContent = info.name + (blocking ? " · shield up" : "") + (flags & FLAG.burning ? " · on fire" : "");
+      // red flash after damage, orange glow while burning
+      const since = f - lastBefore(hurt[n], f);
+      const flash = since >= 0 && since < 3 ? 1 - since / 3 : 0;
+      const burn = flags & FLAG.burning ? 0.35 + 0.25 * Math.sin(f * 2.2) : 0;
+      for (const m of [F.shirt, F.pants]) m.emissive.setRGB(Math.max(flash * 0.9, burn), burn * 0.35, 0);
+      // aim line
+      F.aim.visible = aimLines;
+      if (aimLines) {
+        const ey = y + 1.62, cp = Math.cos(rad(pitch));
+        F.aim.position.set(x, ey, z);
+        F.aim.scale.setScalar(4.5);
+        F.aim.lookAt(tmp.set(x - Math.sin(rad(yaw)) * cp, ey - Math.sin(rad(pitch)), z + Math.cos(rad(yaw)) * cp));
+      }
+      // hearts and name tag
+      const st = t < 0.5 ? p : q;
+      setHearts(heartEls[n], st[I.health], st[I.max]);
+      tmp.set(x, y + 2.35, z).project(camera);
+      const w = vp.clientWidth, h = vp.clientHeight;
+      tags[n].style.left = ((tmp.x + 1) / 2) * w + "px";
+      tags[n].style.top = ((1 - tmp.y) / 2) * h + "px";
+      tags[n].hidden = tmp.z > 1;
+    });
+    // projectiles, moved along their velocity between frames (velocity is per tick, a step is two ticks)
+    const ps = A.p;
+    ps.forEach((p, k) => {
+      const m = projMesh(k), kind = p[0];
+      m.visible = true;
+      m.geometry = kind === "arrow" ? arrowGeo : orbGeo;
+      m.material = projMats[kind] || projMats.other;
+      m.position.set(p[1] + p[4] * 2 * t, p[2] + p[5] * 2 * t, p[3] + p[6] * 2 * t);
+      if (kind === "arrow") m.lookAt(tmp.set(m.position.x + p[4], m.position.y + p[5], m.position.z + p[6]));
+    });
+    for (let k = ps.length; k < projPool.length; k++) projPool[k].visible = false;
+    A.l.forEach((l, k) => {
+      const m = liquidMesh(k);
+      m.visible = true;
+      m.material = l[3] ? lavaMat : waterMat;
+      m.position.set(l[0], l[1] + 0.44, l[2]);
+    });
+    for (let k = A.l.length; k < liquidPool.length; k++) liquidPool[k].visible = false;
+    return mid.multiplyScalar(0.5);
+  }
+
+  // ---------- 2D charts ----------
+  function sizeCanvas(c) {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = c.clientWidth, h = c.clientHeight;
+    if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+    const g = c.getContext("2d");
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { g, w, h };
+  }
+  const tl = document.getElementById("timeline"), vc = document.getElementById("valueChart"), strip = document.getElementById("itemStrip");
+  const staticLayers = {};
+  function drawStatic() {
+    if (!frames) return;
+    // timeline: hits above (dealt) and below (taken) a centre line
+    {
+      const { g, w, h } = sizeCanvas(tl);
+      g.clearRect(0, 0, w, h);
+      g.fillStyle = T.line; g.fillRect(0, h / 2 - 0.5, w, 1);
+      for (let k = 0; k < last; k++) {
+        const x = ((k + 1) / last) * w;
+        const dealt = frames[k].hitB || 0, taken = frames[k].hitA || 0;
+        if (dealt > 0) { g.fillStyle = T.bot; g.fillRect(x - 1, h / 2 - 2 - Math.min(1, dealt / 7) * (h / 2 - 4), 2.5, Math.min(1, dealt / 7) * (h / 2 - 4)); }
+        if (taken > 0) { g.fillStyle = T.theo; g.fillRect(x - 1, h / 2 + 2, 2.5, Math.min(1, taken / 7) * (h / 2 - 4)); }
+      }
+    }
+    // value chart
+    {
+      const { g, w, h } = sizeCanvas(vc);
+      const vals = frames.map(fr => fr.v);
+      const top = Math.max(1, ...vals.map(Math.abs)) * 1.1;
+      const padL = 36, padB = 16, ph = h - padB - 6;
+      const X = k => padL + (k / last) * (w - padL - 6), Y = v => 6 + ph / 2 - (v / top) * (ph / 2);
+      g.clearRect(0, 0, w, h);
+      g.font = '11px "IBM Plex Mono", monospace';
+      g.fillStyle = T.muted; g.textAlign = "right"; g.textBaseline = "middle";
+      for (const v of [top / 1.1, 0, -top / 1.1]) {
+        g.fillText((v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(1), padL - 6, Y(v));
+        g.fillStyle = T.line; g.fillRect(padL, Math.round(Y(v)), w - padL - 6, 1); g.fillStyle = T.muted;
+      }
+      g.textAlign = "left"; g.textBaseline = "alphabetic";
+      g.fillText("0 s", padL, h - 3);
+      g.textAlign = "right"; g.fillText((last * R.stepSeconds).toFixed(1) + " s", w - 6, h - 3);
+      for (const [sign, color] of [[1, T.bot], [-1, T.theo]]) {
+        g.beginPath(); g.moveTo(X(0), Y(0));
+        vals.forEach((v, k) => g.lineTo(X(k), Y(sign > 0 ? Math.max(0, v) : Math.min(0, v))));
+        g.lineTo(X(last), Y(0)); g.closePath();
+        g.globalAlpha = 0.18; g.fillStyle = color; g.fill(); g.globalAlpha = 1;
+      }
+      g.beginPath(); vals.forEach((v, k) => (k ? g.lineTo(X(k), Y(v)) : g.moveTo(X(k), Y(v))));
+      g.strokeStyle = T.ink; g.lineWidth = 1.5; g.stroke();
+      staticLayers.value = { X, Y, vals, padL };
+    }
+    // held items: PvpBot on top, Theo below
+    {
+      const { g, w, h } = sizeCanvas(strip);
+      const padL = 52, row = (h - 6) / 2;
+      g.clearRect(0, 0, w, h);
+      g.font = '11px "IBM Plex Mono", monospace'; g.textBaseline = "middle"; g.textAlign = "left";
+      const seen = new Set();
+      ["a", "b"].forEach((s, n) => {
+        g.fillStyle = n ? T.theo : T.bot;
+        g.fillText(n ? "Theo" : "PvpBot", 0, 3 + row * n + row / 2);
+        for (let k = 0; k < last; k++) {
+          const item = R.items[frames[k][s][I.held]];
+          seen.add(item);
+          const info = itemInfo(item);
+          if (info.shape === "none") continue;
+          const x0 = padL + (k / last) * (w - padL), x1 = padL + ((k + 1) / last) * (w - padL);
+          g.fillStyle = info.color;
+          g.fillRect(x0, 3 + row * n + 2, x1 - x0 + 0.6, row - 4);
+          if (frames[k][s][I.flags] & FLAG.blocking) { g.fillStyle = T.ink; g.fillRect(x0, 3 + row * n + row - 4, x1 - x0 + 0.6, 2); }
+        }
+      });
+      staticLayers.strip = { padL, w };
+      document.getElementById("itemLegend").innerHTML = [...seen].filter(it => itemInfo(it).shape !== "none")
+        .map(it => `<span><i style="background:${itemInfo(it).color}"></i>${itemInfo(it).name}</span>`).join("") +
+        '<span><i style="background:var(--ink);height:3px;vertical-align:2px"></i>shield up</span>';
+    }
+  }
+  function drawPlayhead(f) {
+    const L = staticLayers.value;
+    if (!L) return;
+    // value chart and timeline are redrawn cheaply: static part plus a playhead line
+    drawStatic();
+    const { g, h } = sizeCanvas(vc);
+    const x = L.X(f);
+    g.fillStyle = T.ink; g.fillRect(Math.round(x) - 1, 4, 2, h - 20);
+    const v = lerp(L.vals[Math.floor(f)], L.vals[Math.min(last, Math.floor(f) + 1)], f % 1);
+    g.beginPath(); g.arc(x, L.Y(v), 4, 0, Math.PI * 2); g.fillStyle = v >= 0 ? T.bot : T.theo; g.fill();
+    const t = sizeCanvas(tl);
+    t.g.fillStyle = T.ink; t.g.fillRect(Math.round((f / last) * t.w) - 1, 0, 2, t.h);
+    const s = sizeCanvas(strip), S = staticLayers.strip;
+    s.g.fillStyle = T.ink; s.g.fillRect(Math.round(S.padL + (f / last) * (S.w - S.padL)) - 1, 0, 2, s.h);
+  }
+
+  // ---------- playback ----------
+  let current = 0, frame = 0, playing = false, speed = 1, aimLines = true, lastTime = 0, needsDraw = true, lastChartFrame = -1;
+  const playBtn = document.getElementById("play"), scrub = document.getElementById("scrub"), clock = document.getElementById("clock");
+  const banner = document.getElementById("banner");
+  function setPlaying(p) { playing = p && frame < last; playBtn.textContent = playing ? "Pause" : frame >= last ? "Replay" : "Play"; }
+  function seek(f) { frame = Math.max(0, Math.min(last, f)); needsDraw = true; if (frame >= last) setPlaying(false); }
+  function requestDraw() { needsDraw = true; }
+
+  function loadFight(index, autoplay) {
+    current = index;
+    prepare(index);
+    scrub.max = String(last);
+    frame = 0;
+    lastChartFrame = -1;
+    document.querySelectorAll(".fight").forEach(b => b.setAttribute("aria-current", String(Number(b.dataset.index) === index)));
+    drawStatic();
+    const start = pose(0);
+    cam.target.set(start.x, 1, start.z);
+    setPlaying(autoplay);
+    needsDraw = true;
+    try { history.replaceState(null, "", "#f" + (index + 1)); } catch (e) {}
+  }
+
+  function render(now) {
+    const dt = lastTime ? Math.min(0.1, (now - lastTime) / 1000) : 0;
+    lastTime = now;
+    if (playing) {
+      frame = Math.min(last, frame + (dt / R.stepSeconds) * speed);
+      if (frame >= last) setPlaying(false);
+      needsDraw = true;
+    }
+    if (needsDraw) {
+      needsDraw = false;
+      const mid = pose(frame);
+      if (cam.follow) cam.target.lerp(tmp.set(mid.x, 1, mid.z), playing ? 0.08 : 1);
+      placeCamera();
+      // reposition tags after the camera moves
+      pose(frame);
+      renderer.render(scene, camera);
+      scrub.value = String(frame);
+      clock.textContent = (frame * R.stepSeconds).toFixed(1) + " s · tick " + Math.round(frame * 2);
+      if (Math.abs(frame - lastChartFrame) > 0.2 || !playing) { drawPlayhead(frame); lastChartFrame = frame; }
+      const done = frame >= last;
+      banner.hidden = !done;
+      if (done) {
+        banner.textContent = fight.outcome === 1 ? "PvpBot wins" : fight.outcome === -1 ? "Theo wins" : "Draw: time ran out";
+        banner.style.color = fight.outcome === 1 ? T.bot : fight.outcome === -1 ? T.theo : T.muted;
+      }
+      if (playing) needsDraw = true;
+    }
+    requestAnimationFrame(render);
+  }
+
+  playBtn.addEventListener("click", () => { if (frame >= last) seek(0); setPlaying(!playing); });
+  document.getElementById("restart").addEventListener("click", () => { seek(0); setPlaying(false); });
+  document.getElementById("back").addEventListener("click", () => { setPlaying(false); seek(Math.ceil(frame) - 1); });
+  document.getElementById("fwd").addEventListener("click", () => { setPlaying(false); seek(Math.floor(frame) + 1); });
+  document.getElementById("speed").addEventListener("change", e => { speed = Number(e.target.value); });
+  document.getElementById("follow").addEventListener("change", e => { cam.follow = e.target.checked; requestDraw(); });
+  document.getElementById("aim").addEventListener("change", e => { aimLines = e.target.checked; requestDraw(); });
+  scrub.addEventListener("input", () => { setPlaying(false); seek(Number(scrub.value)); });
+  document.addEventListener("keydown", e => {
+    if (e.target.matches("input, select, textarea")) return;
+    if (e.code === "Space") { e.preventDefault(); playBtn.click(); }
+    else if (e.key === "ArrowLeft") { setPlaying(false); seek(Math.ceil(frame) - 1); }
+    else if (e.key === "ArrowRight") { setPlaying(false); seek(Math.floor(frame) + 1); }
+  });
+
+  // ---------- fight list ----------
+  const list = document.getElementById("fightList");
+  const groups = [];
+  R.fights.forEach((f, index) => {
+    const key = f.label + "|" + f.opponent;
+    let g = groups.find(x => x.key === key);
+    if (!g) groups.push(g = { key, label: f.label, iteration: f.iteration, opponent: f.opponent, items: [] });
+    g.items.push(index);
+  });
+  for (const g of groups) {
+    const wrap = document.createElement("div");
+    wrap.className = "group";
+    const it = g.iteration != null ? `PPO update ${g.iteration}` : "imitation only";
+    wrap.innerHTML = `<h3>${g.label}<small>${it} · vs ${g.opponent.replace("(smp)", "(sword style)").replace("(ranged)", "(bow style)")}</small></h3>`;
+    g.items.forEach((index, n) => {
+      const f = R.fights[index];
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "fight";
+      b.dataset.index = String(index);
+      const res = f.outcome === 1 ? ["won", "Won"] : f.outcome === -1 ? ["lost", "Lost"] : ["draw", "Draw"];
+      b.innerHTML = `<span class="chip ${res[0]}">${res[1]}</span><span>#${n + 1} · ${((f.frames.length - 1) * R.stepSeconds).toFixed(1)} s</span>` +
+        `<span class="dmg">${f.dealt.toFixed(0)}/${f.taken.toFixed(0)}</span>`;
+      b.title = `Damage dealt ${f.dealt} / taken ${f.taken} (fire and lava not counted)`;
+      b.addEventListener("click", () => loadFight(index, !reduceMotion));
+      wrap.appendChild(b);
+    });
+    list.appendChild(wrap);
+  }
+  const foot = document.createElement("p");
+  foot.className = "legend";
+  foot.textContent = "Numbers on the right: damage dealt / taken by PvpBot.";
+  list.appendChild(foot);
+  document.getElementById("recorded").textContent = `Recorded ${R.recorded}: ${R.fights.length} fights, all shown.`;
+
+  // ---------- sizing and theme ----------
+  function resize() {
+    const w = vp.clientWidth, h = vp.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    lastChartFrame = -1;
+    drawStatic();
+    needsDraw = true;
+  }
+  new ResizeObserver(resize).observe(vp);
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+  new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  const fromHash = /^#f(\d+)$/.exec(location.hash);
+  const startIndex = fromHash ? Math.min(R.fights.length, Math.max(1, Number(fromHash[1]))) - 1 : 0;
+  applyTheme();
+  loadFight(startIndex, !reduceMotion);
+  resize();
+  requestAnimationFrame(render);
+})();
+</script>

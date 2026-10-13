@@ -1,0 +1,17 @@
+recording 16000 steps of the teacher (20% random actions mixed in)...
+  recorded 2000/16000 steps, teacher won 0/5 fights so far
+  recorded 4000/16000 steps, teacher won 1/11 fights so far
+  recorded 6000/16000 steps, teacher won 4/17 fights so far
+  recorded 8000/16000 steps, teacher won 6/25 fights so far
+  recorded 10000/16000 steps, teacher won 7/31 fights so far
+  recorded 12000/16000 steps, teacher won 7/36 fights so far
+  recorded 14000/16000 steps, teacher won 8/42 fights so far
+  recorded 16000/16000 steps, teacher won 9/47 fights so far
+epoch 0: policy loss 6.125, value loss 0.150, matches teacher on aim 43%/47%, attack 96%, move 82%
+epoch 5: policy loss 2.485, value loss 0.032, matches teacher on aim 79%/76%, attack 96%, move 93%
+epoch 10: policy loss 1.941, value loss 0.021, matches teacher on aim 88%/81%, attack 99%, move 95%
+epoch 15: policy loss 1.621, value loss 0.016, matches teacher on aim 92%/85%, attack 99%, move 97%
+epoch 20: policy loss 1.385, value loss 0.013, matches teacher on aim 95%/89%, attack 100%, move 98%
+epoch 25: policy loss 1.217, value loss 0.011, matches teacher on aim 97%/90%, attack 100%, move 98%
+epoch 29: policy loss 1.125, value loss 0.010, matches teacher on aim 96%/93%, attack 100%, move 98%
+saved pretrained.pt

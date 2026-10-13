@@ -1,0 +1,9 @@
+Control: earlier checkpoints vs the same freshly spawned Theo expert (sword style), 10 fights each, actions sampled.
+Produced by a one-off script with the same loop as eval.py.
+
+pretrained.pt            iter     -: won 0, lost 10, draw 0 | dealt  1.3 taken 21.1 | bow held 16% | 60 steps
+checkpoint_stage3.pt     iter    12: won 2, lost 8, draw 0 | dealt  5.0 taken 18.6 | bow held 6% | 78 steps
+checkpoint_stage6.pt     iter   144: won 0, lost 10, draw 0 | dealt  8.3 taken 21.5 | bow held 98% | 89 steps
+checkpoint_stage8.pt     iter   192: won 2, lost 8, draw 0 | dealt 13.3 taken 21.3 | bow held 98% | 142 steps
+checkpoint_stage10.pt    iter   302: won 7, lost 3, draw 0 | dealt 22.0 taken 12.9 | bow held 93% | 244 steps
+checkpoint.pt            iter  1140: won 10, lost 0, draw 0 | dealt 23.6 taken  2.9 | bow held 90% | 122 steps

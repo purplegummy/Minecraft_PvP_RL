@@ -1,0 +1,5 @@
+name: PvpEnv
+version: 0.1.0
+main: com.rlmob.pvpenv.PvpEnvPlugin
+api-version: '26.2'
+description: 1v1 PvP reinforcement-learning environment driven by Python over a local socket.
